@@ -3,13 +3,24 @@
 // (c) Mar 2012, Tobias Quinn <tobias@tobiasquinn.com>
 // GPLv3
 
+// vala ref man: http://www.masella.name/~andre/libgit2/x11/X.html
+
 using X;
 using GLib;
+
+// to find key (keyboard)/button (mouse) encryption:
+// google for documentation 'Xlib − C Language X Interface'
+// less /usr/share/X11/xkb/keycodes/evdev
+// xev
 
 const int MOUSEWHEEL_UP   = 4;
 const int MOUSEWHEEL_DOWN = 5;
 
-const int[] BUTTONS = { MOUSEWHEEL_UP, MOUSEWHEEL_DOWN };
+// panic button: once one has zoomed in and wants zoom back out click (while still pressing chosen modifier-key (alt as default)) right.
+// TODO: make it selectable in settings
+const int ESC_BUTTON = 3; // right mouse button (according to xev...)
+
+const int[] BUTTONS = { MOUSEWHEEL_UP, MOUSEWHEEL_DOWN, ESC_BUTTON };
 const int[] MASKS = { 0, X.KeyMask.Mod2Mask, X.KeyMask.LockMask , X.KeyMask.LockMask | X.KeyMask.Mod2Mask };
 
 [DBus (name = "org.gnome.Magnifier")]
@@ -96,6 +107,19 @@ class Zoomer : GLib.Object {
             }
         }
     }
+    
+    public void zoomEsc() {
+        current_zoom = 1;
+        if (zoom_active) {
+            mag.setActive(false);
+            zoom_active = false;
+        }
+        try {
+            zoom.setMagFactor(current_zoom, current_zoom);
+        } catch (Error e) {
+            refresh_dbus();
+        }
+    }
 }
 
 class WatchForMagnifier : GLib.Object {
@@ -127,7 +151,7 @@ void main(string[] arg) {
     // wait for the magnifier interface to appear
     WatchForMagnifier wfm = new WatchForMagnifier();
 
-    // load appropriate key from dconf configuration
+    // load appropriate key from dconf configuration (dconf-editor)
     var settings = new Settings("com.tobiasquinn.mousewheelzoom");
     string key = settings.get_string("modifier-key");
     // default to ALT as modifier
@@ -169,6 +193,10 @@ void main(string[] arg) {
 
             case MOUSEWHEEL_DOWN:
                 zoom.zoomOut();
+                break;
+
+            case ESC_BUTTON: // panic mode
+                zoom.zoomEsc();
                 break;
 
             default:
